@@ -1,0 +1,21 @@
+services:
+  backend:
+    build: ./backend
+    ports: ["8000:8000"]
+    environment:
+      # Switch to "yahoo" for live NSE quotes during market hours.
+      PROVIDER: replay
+      POLL_INTERVAL_SECONDS: "10"
+      DATABASE_URL: sqlite:////data/pulse.db
+    volumes:
+      - pulse-data:/data
+
+  frontend:
+    build: ./frontend
+    ports: ["5173:5173"]
+    depends_on: [backend]
+    environment:
+      VITE_API_TARGET: http://backend:8000
+
+volumes:
+  pulse-data:

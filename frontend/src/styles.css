@@ -1,0 +1,595 @@
+/* Pulse
+ *
+ * The visual idea: a trading desk at rest. Dark, because this is a surface a
+ * user glances at repeatedly through a working day and a bright field is
+ * tiring; and because a dark ground lets the one thing that matters -- a
+ * symbol stepping outside its normal range -- actually glow.
+ *
+ * Colour is never decoration here. Green and red mean direction. Violet means
+ * unread. Amber means we are unsure of our own data. Nothing is coloured for
+ * looks, which is why the few coloured things read as information.
+ *
+ * The hero is the significance band: the product's judgement, drawn.
+ */
+
+:root {
+  --void: #0a0f1a;
+  --surface: #111a28;
+  --surface-2: #16212f;
+  --line: #223047;
+  --line-soft: #1a2434;
+
+  --text: #e9eff8;
+  --text-soft: #93a6c0;
+  --text-faint: #61748f;
+
+  --up: #2ed47a;
+  --up-dim: rgba(46, 212, 122, 0.14);
+  --down: #ff5f5f;
+  --down-dim: rgba(255, 95, 95, 0.14);
+  --attention: #7d6cff;
+  --attention-dim: rgba(125, 108, 255, 0.16);
+  --warn: #f0a93b;
+  --warn-dim: rgba(240, 169, 59, 0.14);
+
+  --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--void);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; font-size: inherit; cursor: pointer; }
+
+:focus-visible {
+  outline: 2px solid var(--attention);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.up { color: var(--up); }
+.down { color: var(--down); }
+
+/* ---------------------------------------------------------------- shell */
+
+.shell { max-width: 1240px; margin: 0 auto; padding: 0 26px 72px; }
+
+.masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 30px 0 22px;
+}
+
+.wordmark {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.tagline { color: var(--text-soft); font-size: 14px; margin: 3px 0 0; }
+
+.masthead-right { display: flex; align-items: center; gap: 12px; }
+
+.handle-field {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  width: 132px;
+}
+
+.pulse-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-soft);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 13px;
+}
+
+.pulse-dot::before {
+  content: '';
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.pulse-dot[data-state='live']::before {
+  background: var(--up);
+  box-shadow: 0 0 0 3px var(--up-dim);
+}
+.pulse-dot[data-state='reconnecting']::before { background: var(--warn); }
+.pulse-dot[data-state='offline']::before {
+  background: var(--down);
+  box-shadow: 0 0 0 3px var(--down-dim);
+}
+
+/* ------------------------------------------------- the significance band */
+
+.band {
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px 24px 16px;
+}
+
+.band-head { margin-bottom: 16px; }
+.band-head h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+.band-head p { margin: 3px 0 0; font-size: 13px; color: var(--text-soft); }
+
+.band-plot { position: relative; }
+
+/* The alert threshold, drawn where the decision is actually made. */
+.band-threshold {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: repeating-linear-gradient(
+    90deg, var(--line) 0 5px, transparent 5px 10px);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.band-threshold span {
+  position: absolute;
+  right: 0;
+  top: -8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  background: var(--surface-2);
+  padding: 0 5px;
+}
+
+.band-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 116px;
+}
+
+.band-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+
+.band-track {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.band-bar {
+  width: 100%;
+  max-width: 46px;
+  border-radius: 4px 4px 2px 2px;
+  background: var(--line);
+  /* The only ambient motion in the interface, and it is data: the bar moves
+   * because the market did. */
+  transition: height 700ms cubic-bezier(0.22, 1, 0.36, 1), background 400ms ease;
+}
+
+.band-bar[data-state='quiet']    { background: #2b3b54; }
+.band-bar[data-state='learning'] { background: repeating-linear-gradient(
+    45deg, #253449 0 4px, #1c2739 4px 8px); }
+.band-bar[data-state='up'] {
+  background: linear-gradient(180deg, var(--up) 0%, #1a8f54 100%);
+  box-shadow: 0 0 18px var(--up-dim);
+}
+.band-bar[data-state='down'] {
+  background: linear-gradient(180deg, var(--down) 0%, #b03636 100%);
+  box-shadow: 0 0 18px var(--down-dim);
+}
+
+.band-sigma {
+  margin-top: 7px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.band-sigma[data-state='up'] { color: var(--up); }
+.band-sigma[data-state='down'] { color: var(--down); }
+
+.band-ticker {
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--text-faint);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- columns */
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+  padding-top: 32px;
+}
+
+.column-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  min-height: 34px;
+}
+
+.column-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.pill {
+  background: var(--attention);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+.count { color: var(--text-faint); font-size: 13px; }
+
+/* The reading position: one rule across the feed marking where attention
+ * stopped last time. The product's central idea, made literal. */
+.lastcheck {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 10px;
+  color: var(--attention);
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 300ms ease;
+}
+
+.lastcheck::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--attention), transparent);
+  opacity: 0.55;
+}
+
+.lastcheck[data-settled='true'] { color: var(--text-faint); }
+.lastcheck[data-settled='true']::after {
+  background: linear-gradient(90deg, var(--line), transparent);
+}
+
+/* ------------------------------------------------------------- the feed */
+
+.feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+
+.entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: start;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--attention);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.entry[data-severity='high']    { border-left-color: var(--down); }
+.entry[data-severity='warning'] { border-left-color: var(--warn); }
+
+.entry-body { min-width: 0; }
+
+.entry-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 7px;
+}
+
+.entry-when { font-size: 11.5px; color: var(--text-faint); }
+
+.entry-headline {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.entry-detail {
+  margin: 4px 0 0;
+  color: var(--text-soft);
+  font-size: 13.5px;
+  max-width: 60ch;
+}
+
+.entry-side { text-align: right; white-space: nowrap; }
+.entry-change { font-size: 16px; font-weight: 600; }
+.entry-price {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  background: var(--attention-dim);
+  color: #a99bff;
+}
+
+.tag[data-severity='high']    { background: var(--down-dim); color: var(--down); }
+.tag[data-severity='warning'] { background: var(--warn-dim); color: var(--warn); }
+.tag[data-kind='drift']       { background: #1d2939; color: var(--text-soft); }
+
+/* The sigma meter: the number, and what the number means. */
+.meter { display: flex; align-items: center; gap: 9px; margin-top: 11px; }
+
+.meter-track {
+  position: relative;
+  flex: 1;
+  max-width: 190px;
+  height: 4px;
+  background: #1d2839;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #6f7fa3;
+  transition: width 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.meter-fill[data-severity='high']    { background: var(--down); }
+.meter-fill[data-severity='medium']  { background: var(--attention); }
+.meter-fill[data-severity='warning'] { background: var(--warn); }
+
+/* Where the alert threshold sits, so the fill can be read against it. */
+.meter-mark {
+  position: absolute;
+  top: -2px;
+  width: 1px;
+  height: 8px;
+  background: var(--text-faint);
+  opacity: 0.7;
+}
+
+.meter-value { font-size: 11.5px; color: var(--text-faint); }
+
+/* ------------------------------------------------------ empty and notice */
+
+.empty {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.empty-mark {
+  flex: none;
+  width: 8px; height: 8px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--up);
+  box-shadow: 0 0 0 4px var(--up-dim);
+}
+
+.empty p, .notice {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  max-width: 56ch;
+}
+.empty strong, .notice strong { color: var(--text); font-weight: 600; }
+.notice { padding: 18px 0; }
+
+/* -------------------------------------------------------- the watchlist */
+
+.holdings { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+
+.holding {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 11px 14px;
+}
+
+.holding[data-stale='true'] { border-color: rgba(240, 169, 59, 0.32); }
+.holding[data-stale='true'] .holding-price { color: var(--text-faint); }
+
+.pin {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+}
+.pin[data-on='true'] { color: var(--attention); }
+
+.holding-id { min-width: 0; display: flex; flex-direction: column; }
+
+.holding-ticker { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
+
+.holding-name {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.holding-drift { font-size: 11px; margin-top: 2px; }
+.holding-drift[data-direction='up'] { color: var(--up); }
+.holding-drift[data-direction='down'] { color: var(--down); }
+
+.spark { flex: none; }
+.spark[data-direction='up'] path { stroke: var(--up); }
+.spark[data-direction='down'] path { stroke: var(--down); }
+
+.holding-figures { text-align: right; white-space: nowrap; }
+.holding-price { display: block; font-size: 14px; }
+.holding-change { display: block; font-size: 11.5px; margin-top: 1px; }
+
+.stale-flag {
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--warn-dim);
+  color: var(--warn);
+  font-size: 10.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- controls */
+
+.action {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.action:hover:not(:disabled) { border-color: var(--text-faint); }
+.action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.action-primary {
+  background: var(--attention);
+  border-color: var(--attention);
+  color: #fff;
+}
+.action-primary:hover:not(:disabled) { background: #6b58ff; border-color: #6b58ff; }
+
+.link-action {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+.link-action:hover { color: var(--down); }
+
+.add-row { display: flex; gap: 8px; margin-top: 16px; }
+
+.add-input {
+  flex: 1;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 7px;
+  padding: 9px 12px;
+  font-family: var(--mono);
+  font-size: 13px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.add-input::placeholder { text-transform: none; font-family: var(--sans); color: var(--text-faint); }
+
+.suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+.suggestion {
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-soft);
+  transition: border-color 140ms ease, color 140ms ease;
+}
+.suggestion:hover { border-color: var(--attention); color: #a99bff; }
+
+.error-bar {
+  margin-top: 14px;
+  padding: 10px 13px;
+  border-left: 3px solid var(--down);
+  background: var(--down-dim);
+  color: #ff9d9d;
+  font-size: 13.5px;
+  border-radius: 0 6px 6px 0;
+}
+
+.engine-note {
+  margin-top: 40px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--text-faint);
+  font-size: 12.5px;
+  max-width: 74ch;
+}
+
+.engine-note code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+/* ---------------------------------------------------------- responsive */
+
+@media (max-width: 900px) {
+  .columns { grid-template-columns: 1fr; gap: 34px; }
+  .entry-detail { max-width: none; }
+  .holding { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .spark { display: none; }
+  .band-bars { height: 92px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
