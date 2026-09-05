@@ -11,12 +11,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -301,3 +304,41 @@ def health():
 def universe():
     """Symbols the demo provider knows about, for the add-symbol picker."""
     return {"symbols": [{"ticker": t, "name": v[0]} for t, v in UNIVERSE.items()]}
+
+
+# --- serving the built frontend -------------------------------------------
+#
+# In development the Vite dev server proxies /api to this process. In
+# production the two are one service: FastAPI serves the built React bundle
+# from the same origin as the API.
+#
+# One origin rather than two is the simpler deployment by some distance --
+# no CORS, no second host to configure, no chance of the frontend pointing at
+# a stale backend URL. The cost is that a frontend change needs a rebuild,
+# which for a project of this size is a few seconds.
+#
+# Order matters: this mount is declared last, after every /api route, so the
+# catch-all below can never shadow them.
+
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+if STATIC_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"),
+              name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_spa(full_path: str):
+        """Return index.html for any non-API path.
+
+        The client is a single-page app: it owns its own routing, so a deep
+        link has to reach index.html rather than 404. Real files are served
+        directly when they exist so a favicon or manifest still resolves.
+        """
+        candidate = (STATIC_DIR / full_path).resolve()
+        # Resolve and compare so a crafted path cannot escape the directory.
+        if (candidate.is_file()
+                and candidate.is_relative_to(STATIC_DIR.resolve())):
+            return FileResponse(candidate)
+        return FileResponse(STATIC_DIR / "index.html")
+else:
+    log.info("no static build found, running API only (dev mode)")

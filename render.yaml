@@ -1,0 +1,18 @@
+# One-click deploy config for Render.
+#
+# The free instance sleeps after inactivity, so the first request after a
+# quiet period pays a cold start before the warmup even begins. That is a
+# property of the free tier, not of the app; the README says so plainly
+# rather than letting a reviewer conclude the thing is slow.
+services:
+  - type: web
+    name: pulse
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: PROVIDER
+        value: replay
+      - key: POLL_INTERVAL_SECONDS
+        value: "10"

@@ -48,9 +48,23 @@ Open **http://localhost:5173**.
 
 ### With Docker instead
 
+One image, one service: the API and the built frontend on the same origin.
+
 ```bash
-docker compose up --build
+docker build -t pulse . && docker run -p 8000:8000 pulse
 ```
+
+Then open **http://localhost:8000** — no separate frontend server.
+
+### Deploying it
+
+`render.yaml` deploys the Dockerfile as a single web service. Point Render at
+the repository and it picks the config up; the health check is `/api/health`.
+
+**On a free instance, expect a slow first load.** The container sleeps after
+inactivity, so the first request pays a cold start of roughly a minute before
+the app's own startup warmup begins. That is the hosting tier, not the
+application — running it locally with the commands above starts in seconds.
 
 ---
 

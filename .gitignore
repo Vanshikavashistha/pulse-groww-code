@@ -8,3 +8,4 @@ dist/
 *.db-shm
 .DS_Store
 .pytest_cache/
+backend/static/
