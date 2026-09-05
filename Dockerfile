@@ -9,6 +9,11 @@ COPY frontend/package*.json ./
 RUN npm ci || npm install
 COPY frontend/ ./
 RUN npm run build
+# Fail loudly here rather than shipping an image whose frontend is missing.
+# A build that "succeeds" into a 404 is far more expensive to diagnose than
+# one that stops at the step that actually went wrong.
+RUN test -f /build/dist/index.html \
+    && echo "--- frontend build output ---" && ls -la /build/dist
 
 # --- stage 2: the runtime --------------------------------------------------
 FROM python:3.12-slim
@@ -19,6 +24,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
 COPY --from=frontend /build/dist ./static
+RUN test -f /app/static/index.html \
+    && echo "--- static copied into image ---" && ls -la /app/static
 
 ENV PROVIDER=replay \
     POLL_INTERVAL_SECONDS=10 \

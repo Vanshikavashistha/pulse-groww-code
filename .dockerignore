@@ -1,0 +1,13 @@
+# Keep the build context small and reproducible: never ship a local install or
+# a stale build into the image, since stage 1 produces its own.
+node_modules
+**/node_modules
+frontend/dist
+backend/static
+.venv
+**/__pycache__
+*.db
+*.db-wal
+*.db-shm
+.git
+.pytest_cache

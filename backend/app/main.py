@@ -295,6 +295,7 @@ def health():
     """Exposed because a system that hides its own degradation cannot be
     trusted with money. The UI reads this to show provider state honestly."""
     return {"status": "ok", "poller": poller.health(),
+            "frontend": str(STATIC_DIR) if STATIC_DIR else "not found",
             "thresholds": {"z_score": settings.Z_SCORE_THRESHOLD,
                            "volume_surge": settings.VOLUME_SURGE_RATIO,
                            "stale_after_seconds": settings.STALE_AFTER_SECONDS}}
@@ -317,14 +318,27 @@ def universe():
 # a stale backend URL. The cost is that a frontend change needs a rebuild,
 # which for a project of this size is a few seconds.
 #
-# Order matters: this mount is declared last, after every /api route, so the
-# catch-all below can never shadow them.
+# The bundle's location differs between running from a container image and
+# running from a checkout, so rather than hardcoding one layout we check the
+# plausible ones and log which was used. A silent failure here degrades to a
+# bare 404 with nothing to explain it, which is a miserable thing to debug on
+# a host you cannot shell into.
 
-STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+STATIC_CANDIDATES = [
+    Path(__file__).resolve().parent.parent / "static",   # container image
+    Path.cwd() / "static",                               # cwd-relative
+    Path(__file__).resolve().parent.parent.parent / "frontend" / "dist",  # checkout
+]
 
-if STATIC_DIR.is_dir():
-    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"),
-              name="assets")
+STATIC_DIR = next((p for p in STATIC_CANDIDATES
+                   if (p / "index.html").is_file()), None)
+
+if STATIC_DIR is not None:
+    log.info("serving frontend from %s", STATIC_DIR)
+
+    assets = STATIC_DIR / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def serve_spa(full_path: str):
@@ -334,11 +348,12 @@ if STATIC_DIR.is_dir():
         link has to reach index.html rather than 404. Real files are served
         directly when they exist so a favicon or manifest still resolves.
         """
-        candidate = (STATIC_DIR / full_path).resolve()
+        root = STATIC_DIR.resolve()
+        candidate = (root / full_path).resolve()
         # Resolve and compare so a crafted path cannot escape the directory.
-        if (candidate.is_file()
-                and candidate.is_relative_to(STATIC_DIR.resolve())):
+        if candidate.is_file() and candidate.is_relative_to(root):
             return FileResponse(candidate)
-        return FileResponse(STATIC_DIR / "index.html")
+        return FileResponse(root / "index.html")
 else:
-    log.info("no static build found, running API only (dev mode)")
+    log.warning("no frontend build found, serving the API only. Looked in: %s",
+                ", ".join(str(p) for p in STATIC_CANDIDATES))
